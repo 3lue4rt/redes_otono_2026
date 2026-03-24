@@ -25,6 +25,6 @@ while True:
     print(f' -> Se ha recibido el siguiente mensaje: \n{recv_message.decode()}')
     #http_obj: http_handling.HTTPObject = http_handling.parse_http_message(recv_message)
     #cerramos conección
-    new_socket.close()
-    print(f"conexión con {new_socket_address} ha sido cerrada")
+    #new_socket.close()
+    #print(f"conexión con {new_socket_address} ha sido cerrada")
 
