@@ -74,7 +74,7 @@ def handle_request(http_req: HTTPRequest)-> bytes:
     "crea un mensaje de respuesta para GET o HEAD"
     head: bytes = b''
     body: bytes = b''
-    body_length: bytes = b''
+    body_length: int = 0
     with open("hello.html", encoding="UTF-8") as f_body:
         body: bytes = bytes(f_body.read(), "UTF-8")
         body_length = len(body)
@@ -86,7 +86,7 @@ def handle_request(http_req: HTTPRequest)-> bytes:
     with open("http_example_head_1.txt", encoding="UTF-8") as f_head:
         for head_line in f_head:
             if head_line.startswith("Content-Length:"):
-                head_line = head_line[:-1] + body_length + b'\n'
+                head_line = head_line[:-1] + str(body_length) + b'\n'
             head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
         f_head.close()
     head += b'\r\n'
