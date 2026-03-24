@@ -38,11 +38,20 @@ class HTTPRequest(HTTPObject):
     "Clase que representa un http request"
     def __init__(self, raw_str: bytes):
         HTTPObject.__init__(self, raw_str)
+        start_line_info: bytes = self.start_line.split(" ")
+        self.method: bytes = start_line_info[0]
+        self.dir: bytes = start_line_info[1]
+        self.version: bytes = start_line_info[2]
+
 
 class HTTPResponse(HTTPObject):
     "Clase que representa un http response"
     def __init__(self, raw_str: bytes):
         HTTPObject.__init__(self, raw_str)
+        start_line_info: bytes = self.start_line.split(" ")
+        self.version: bytes = start_line_info[0]
+        self.code: bytes = start_line_info[1]
+        self.text: bytes = start_line_info[2]
 
 def parse_http_message(http_message: bytes)-> HTTPObject:
     "Parsea un mensaje http en bytes y lo transforma a su HTTPObject correspondiente"
@@ -60,6 +69,32 @@ def create_http_message(http_obj: HTTPObject)-> bytes:
         message += key + b': ' + val + b'\r\n'
     message += http_obj.body
     return message
+
+def handle_request(http_req: HTTPRequest)-> bytes:
+    "crea un mensaje de respuesta para GET o HEAD"
+    head: bytes = b''
+    body: bytes = b''
+    body_length: bytes = b''
+    with open("hello.html", encoding="UTF-8") as f_body:
+        body: bytes = bytes(f_body.read(), "UTF-8")
+        body_length = len(body)
+        f_body.close()
+
+        #:v
+
+    #ocupamos un head 
+    with open("http_example_head_1.txt", encoding="UTF-8") as f_head:
+        for head_line in f_head:
+            if head_line.startswith("Content-Length:"):
+                head_line = head_line[:-1] + body_length + b'\n'
+            head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
+        f_head.close()
+    head += b'\r\n'
+
+    if http_req.method == b'HEAD':
+        return head
+    elif http_req.method == b'GET':
+        return head+body
 
 if __name__=="__main__":
     example: bytes = b''

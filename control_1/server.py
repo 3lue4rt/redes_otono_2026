@@ -23,8 +23,13 @@ while True:
     #recibimos el mensaje
     recv_message = new_socket.recv(buffer_size)
     print(f' -> Se ha recibido el siguiente mensaje: \n{recv_message.decode()}')
-    #http_obj: http_handling.HTTPObject = http_handling.parse_http_message(recv_message)
+    http_obj: http_handling.HTTPObject = http_handling.parse_http_message(recv_message)
+
+    #por mientras para ver si funciona
+    if http_obj.start_line.startswith(b'GET') or http_obj.start_line.startswith(b'HEAD'):
+        new_socket.send(http_handling.handle_request(http_obj))
     #cerramos conección
+
     #new_socket.close()
     #print(f"conexión con {new_socket_address} ha sido cerrada")
 
