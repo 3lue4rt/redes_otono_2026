@@ -1,4 +1,5 @@
 import socket
+import http_handling
 
 #CONSTANTES
 IP_VM = "192.168.122.197"
@@ -21,8 +22,8 @@ while True:
 
     #recibimos el mensaje
     recv_message = new_socket.recv(buffer_size)
-    print(f' -> Se ha recibido el siguiente mensaje: {recv_message}')
-
+    print(f' -> Se ha recibido el siguiente mensaje: \n{recv_message.decode()}')
+    #http_obj: http_handling.HTTPObject = http_handling.parse_http_message(recv_message)
     #cerramos conección
     new_socket.close()
     print(f"conexión con {new_socket_address} ha sido cerrada")
