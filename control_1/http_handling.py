@@ -82,11 +82,11 @@ def handle_request(http_req: HTTPRequest)-> bytes:
 
         #:v
 
-    #ocupamos un head 
+    #ocupamos un head default
     with open("http_example_head_1.txt", encoding="UTF-8") as f_head:
         for head_line in f_head:
             if head_line.startswith("Content-Length:"):
-                head_line = head_line[:-1] + str(body_length) + b'\n'
+                head_line = head_line[:-1] + str(body_length) + '\n'
             head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
         f_head.close()
     head += b'\r\n'
