@@ -1,7 +1,7 @@
 import socket
 
 #CONSTANTES
-IP_VM = "192.168.122.1"
+IP_VM = "192.168.122.197"
 port = 80
 vm_address = (IP_VM, port)
 buffer_size = 1024
@@ -16,12 +16,14 @@ print("escuchando hasta 3")
 server_socket.listen(3)
 
 while True:
+    #accept
     new_socket, new_socket_address = server_socket.accept()
 
+    #recibimos el mensaje
     recv_message = new_socket.recv(buffer_size)
-
-    if recv_message.decode()=="exit":
-        new_socket.close()
-        print(f"conexión con {new_socket_address} ha sido cerrada")
-
     print(f' -> Se ha recibido el siguiente mensaje: {recv_message}')
+
+    #cerramos conección
+    new_socket.close()
+    print(f"conexión con {new_socket_address} ha sido cerrada")
+

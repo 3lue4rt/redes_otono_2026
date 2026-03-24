@@ -10,7 +10,6 @@ class HTTPObject:
         separator: int = self.line_list.index(b'')
         self.head: list(bytes) = self.line_list[:separator]
         self.body: list(bytes) = self.line_list[separator:]
-        
 
 class HTTPRequest(HTTPObject):
     "Clase que representa un http request"
