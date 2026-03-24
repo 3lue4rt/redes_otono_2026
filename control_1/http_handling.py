@@ -38,7 +38,7 @@ class HTTPRequest(HTTPObject):
     "Clase que representa un http request"
     def __init__(self, raw_str: bytes):
         HTTPObject.__init__(self, raw_str)
-        start_line_info: bytes = self.start_line.split(b'')
+        start_line_info: bytes = self.start_line.split(b' ')
         self.method: bytes = start_line_info[0]
         self.dir: bytes = start_line_info[1]
         self.version: bytes = start_line_info[2]
