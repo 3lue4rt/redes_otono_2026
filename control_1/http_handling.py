@@ -89,7 +89,7 @@ def handle_request(http_req: HTTPRequest)-> bytes:
                 head_line = head_line[:-1] + str(body_length) + '\n'
             head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
 
-        head += b'X-ElQuePregunta: Benjamin Duarte'
+        head += b'X-ElQuePregunta: Benjamin Duarte\r\n'
         f_head.close()
     head += b'\r\n'
 
