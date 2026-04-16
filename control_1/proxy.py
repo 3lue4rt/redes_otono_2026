@@ -4,10 +4,10 @@ import json
 
 #CONSTANTES
 #ip del proxy, cambiar según usuario al ejecutar proxy.py
-IP_VM = "192.168.122.197"
+IP_VM = "localhost"
 port = 8000
 vm_address = (IP_VM, port)
-buffer_size = 1024
+buffer_size = 64
 
 #aquí guardaremos los settings
 settings = {
@@ -15,6 +15,38 @@ settings = {
     "blocked": [],
     "forbidden_words": []
 }
+
+#toma un socket O.A.C. ya conectado y se asegura de recibir el mensaje completo
+def recieve_message(s: socket.socket) -> bytes:
+    "toma un socket O.A.C. ya conectado y se asegura de recibir el mensaje completo"
+    msg = s.recv(buffer_size)
+    bytes_read = buffer_size
+
+    while b'\r\n\r\n' not in msg:
+        buffer = s.recv(buffer_size)
+        msg += buffer
+        bytes_read += len(buffer)
+        print(f"leyendo {bytes_read} bytes hasta encontrar \\r\\n\\r\\n")
+    head = msg.split(b'\r\n\r\n', 1)[0] + b'\r\n\r\n'
+    
+    #si es un request no necesitamos body
+    if not head.split(b'\r\n')[0].startswith(b"HTTP"):
+        return head
+    
+    body_read = bytes_read - len(head)
+    print(f"he leído {body_read} bytes del body hasta ahora")
+
+    leyendo = True
+    while leyendo:
+        buffer = s.recv(buffer_size)
+        msg += buffer
+        body_read += len(buffer)
+        print(f"he leído {len(buffer)} bytes nuevos del body")
+        if len(buffer)<buffer_size:
+            leyendo = False
+
+    print("Mensaje leído")
+    return msg
 
 #toma un body en bytes y reemplaza todas las
 #palabras prohibídas por su reemplazo
@@ -76,7 +108,7 @@ def handle_request_external(http_req: http_handling.HTTPRequest) -> http_handlin
     http_req.head[b'X-ElQuePregunta'] = bytes(settings["user"], "UTF-8")
     external_socket.send(http_handling.create_http_message(http_req))
     #recibimos la respuesta y la parseamos
-    response = external_socket.recv(buffer_size)
+    response = recieve_message(external_socket)
     external_socket.close()
 
     return http_handling.parse_http_message(response)
@@ -113,7 +145,7 @@ while True:
     client_socket, client_socket_address = proxy_socket.accept()
 
     #recibimos el mensaje
-    recv_message = client_socket.recv(buffer_size)
+    recv_message = recieve_message(client_socket)
     print(f' -> Se ha recibido el siguiente mensaje: \n{recv_message.decode()}')
     http_request = http_handling.parse_http_message(recv_message)
 
