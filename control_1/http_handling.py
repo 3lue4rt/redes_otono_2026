@@ -16,7 +16,9 @@ class HTTPObject:
 
     def parse(self, raw_str: bytes): #-> HTTPObject
         "parsea un str en bytes, actualizando el objeto"
-        head, body = raw_str.split(b"\r\n\r\n", 1)
+        #separamos el head del body
+        head, self.body = raw_str.split(b"\r\n\r\n", 1)
+
         #encontramos el start line
         self.start_line: bytes = head.split(b'\r\n')[0]
 
@@ -30,18 +32,20 @@ class HTTPObject:
                 val = val[1:]
             self.head[key] = val
 
-        #juntamos la lista de bytes del body al original
-        self.body: bytes = body
-
+        
         return self
 
 
 class HTTPRequest(HTTPObject):
     "Clase que representa un http request"
     def __init__(self):
+        #init del objeto
         HTTPObject.__init__(self)
+        #metodo del start line
         self.method: bytes = b''
+        #direccion pedida
         self.dir: bytes = b''
+        #version del http
         self.version: bytes = b''
     
     def parse(self, raw_str: bytes):
@@ -57,8 +61,11 @@ class HTTPResponse(HTTPObject):
     "Clase que representa un http response"
     def __init__(self):
         HTTPObject.__init__(self)
+        #version del http
         self.version: bytes = b''
+        #codigo del mensaje
         self.code: bytes = b''
+        #texto del mensaje
         self.text: bytes = b''
 
     def parse(self, raw_str: bytes):
@@ -80,38 +87,20 @@ def parse_http_message(http_message: bytes)-> HTTPObject:
 
 def create_http_message(http_obj: HTTPObject)-> bytes:
     "Crea un mensaje http a partir de un objeto HTTP que tenga start_line, head y body"
+    #medimos el body
     http_obj.head[b"Content-Length"] = bytes(str(len(http_obj.body)), encoding="UTF-8")
 
     message: bytes = b''
+
+    #agregamos el start line
     message += http_obj.start_line + b'\r\n'
+    
+    #agregamos el head
     for key, val in http_obj.head.items():
         message += key + b': ' + val + b'\r\n'
     message += b'\r\n'
+
+    #agregamos el body
     message += http_obj.body
 
     return message
-
-if __name__=="__main__":
-    example: bytes = b''
-    with open("http_example_head_1.txt", encoding="UTF-8") as f:
-        for line in f:
-            example += bytes(line[:-1], "UTF-8") + b'\r\n'
-            print(line)
-        f.close()
-        example += b'\r\n'
-
-    obj_example= parse_http_message(example)
-    print("----start line----")
-    print(obj_example.start_line)
-    print("----head----")
-    print(obj_example.head)
-    print("----body----")
-    print(obj_example.body)
-    print("--------")
-    obj_example_2= HTTPResponse()
-    obj_example_2.start_line= b'HTTP/1.1 200 OK'
-    obj_example_2.head[b"Content-Type"] = b'text/html; charset=UTF-8'
-    with open("hello.html", encoding="UTF-8") as body_file:
-        obj_example_2.body = bytes(body_file.read(), "UTF-8")
-    print(create_http_message(obj_example_2).decode())
-

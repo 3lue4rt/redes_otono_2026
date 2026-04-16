@@ -3,22 +3,28 @@ import http_handling
 import json
 
 #CONSTANTES
+#ip del proxy, cambiar según usuario al ejecutar proxy.py
 IP_VM = "192.168.122.197"
 port = 8000
 vm_address = (IP_VM, port)
 buffer_size = 1024
+
+#aquí guardaremos los settings
 settings = {
     "user": b'',
     "blocked": [],
     "forbidden_words": []
 }
 
+#toma un body en bytes y reemplaza todas las
+#palabras prohibídas por su reemplazo
 def filter_body(body: bytes) -> bytes:
     for word_replace in settings["forbidden_words"]:
         for original in word_replace:
             body = bytes(body.decode().replace(original, word_replace[original]), "UTF-8")
     return body
 
+#maneja un request segun la direccion pedida
 def handle_request(http_req: http_handling.HTTPRequest)-> http_handling.HTTPResponse:
     "maneja un request de cliente"
     if http_req.dir==b'/':
@@ -26,18 +32,31 @@ def handle_request(http_req: http_handling.HTTPRequest)-> http_handling.HTTPResp
     else:
         return handle_request_external(http_req)
 
+#maneja un request al root del proxy
 def handle_request_internal(_)-> http_handling.HTTPResponse:
     "maneja los request internos y entrega un html default"
+    #creamos un HTTPResponse pelao
     response = http_handling.HTTPResponse()
+
+    #agregamos su start_line
     response.start_line = b'HTTP/1.1 200 OK'
+
+    #agregamos a su head el content type
     response.head[b"Content-Type"] = b'text/html; charset=UTF-8'
+
+    #agregamos el body
     with open("hello.html", encoding="UTF-8") as body:
         response.body = bytes(body.read(), "UTF-8")
+    
     return response
 
+#maneja un request externo al proxy, revisa
+#si el sitio está bloqueado
 def handle_request_external(http_req: http_handling.HTTPRequest) -> http_handling.HTTPResponse:
     "maneja cuando llega un request para conectarse a un servidor externo"
     print("tratando de conectar a", http_req.dir.decode())
+
+    #si es un sitio bloqueado
     if http_req.dir.decode() in settings["blocked"]:
         print("conexion prohibida")
         response = http_handling.HTTPResponse()
@@ -90,7 +109,7 @@ print("escuchando hasta 3")
 proxy_socket.listen(3)
 
 while True:
-    #accept
+    #aceptamos un cliente
     client_socket, client_socket_address = proxy_socket.accept()
 
     #recibimos el mensaje
@@ -102,9 +121,11 @@ while True:
     http_response = handle_request(http_request)
     http_response.body = filter_body(http_response.body)
     byte_response = http_handling.create_http_message(http_response)
+
     print("enviando el siguiente mensaje:")
     print(byte_response.decode())
     client_socket.send(byte_response)
     print("Response enviada")
-    #cerramos conección
+
+    #cerramos conección con el cliente
     client_socket.close()
