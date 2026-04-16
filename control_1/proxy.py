@@ -58,6 +58,7 @@ def handle_request_external(http_req: http_handling.HTTPRequest) -> http_handlin
     external_socket.send(http_handling.create_http_message(http_req))
     #recibimos la respuesta y la parseamos
     response = external_socket.recv(buffer_size)
+    external_socket.close()
 
     return http_handling.parse_http_message(response)
 
@@ -99,6 +100,7 @@ while True:
 
     print("Manejando request ...")
     http_response = handle_request(http_request)
+    http_response.head[b'X-ElQuePregunta'] = bytes(settings["user"], "UTF-8")
     http_response.body = filter_body(http_response.body)
     client_socket.send(http_handling.create_http_message(http_response))
     print("Response enviada")
