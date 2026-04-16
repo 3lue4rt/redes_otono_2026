@@ -4,99 +4,92 @@ class HTTPObject:
 
     Puede ser una request o response
     """
-    def __init__(self, raw_str: bytes):
-        #string pelao en bytes
-        self.raw: bytes = raw_str 
+    def __init__(self):
+        #el start line del mensaje
+        self.start_line: bytes = b''
 
-        #lista de lineas del http
-        self.line_list: list(bytes) = self.raw.split(b'\r\n')
+        #el head del mensaje
+        self.head: dict(bytes, bytes) = {}
 
-        #buscamos el doble salto de línea
-        separator: int = self.line_list.index(b'')
+        #el body del mensaje
+        self.body: bytes = b''
 
-        #separamos head y body
-        self.head_list_bytes: list(bytes) = self.line_list[:separator]
-        self.body_list_bytes: list(bytes) = self.line_list[separator+1:]
-
+    def parse(self, raw_str: bytes): #-> HTTPObject
+        "parsea un str en bytes, actualizando el objeto"
+        head, body = raw_str.split(b"\r\n\r\n", 1)
         #encontramos el start line
-        self.start_line: bytes = self.head_list_bytes[0]
+        self.start_line: bytes = head.split(b'\r\n')[0]
 
         #iniciamos un dict para representar el head
         self.head: dict(bytes, bytes) = {}
 
         #parsear el head (excepto el start line)
-        for line_bytes in self.head_list_bytes[1:]:
+        for line_bytes in head.split(b'\r\n')[1:]:
             key, val = line_bytes.split(b":", 1)
             if val.startswith(b" "):
                 val = val[1:]
             self.head[key] = val
 
         #juntamos la lista de bytes del body al original
-        self.body: bytes = self.body_list_bytes[0]
+        self.body: bytes = body
+
+        return self
+
 
 class HTTPRequest(HTTPObject):
     "Clase que representa un http request"
-    def __init__(self, raw_str: bytes):
-        HTTPObject.__init__(self, raw_str)
+    def __init__(self):
+        HTTPObject.__init__(self)
+        self.method: bytes = b''
+        self.dir: bytes = b''
+        self.version: bytes = b''
+    
+    def parse(self, raw_str: bytes):
+        HTTPObject.__init__(self)
+        HTTPObject.parse(self, raw_str)
         start_line_info: bytes = self.start_line.split(b' ')
         self.method: bytes = start_line_info[0]
         self.dir: bytes = start_line_info[1]
         self.version: bytes = start_line_info[2]
-
+        return self
 
 class HTTPResponse(HTTPObject):
     "Clase que representa un http response"
-    def __init__(self, raw_str: bytes):
-        HTTPObject.__init__(self, raw_str)
-        start_line_info: bytes = self.start_line.split(" ")
+    def __init__(self):
+        HTTPObject.__init__(self)
+        self.version: bytes = b''
+        self.code: bytes = b''
+        self.text: bytes = b''
+
+    def parse(self, raw_str: bytes):
+        HTTPObject.__init__(self)
+        HTTPObject.parse(self, raw_str)
+        start_line_info: bytes = self.start_line.split(b" ")
         self.version: bytes = start_line_info[0]
         self.code: bytes = start_line_info[1]
         self.text: bytes = start_line_info[2]
+        return self
 
 def parse_http_message(http_message: bytes)-> HTTPObject:
     "Parsea un mensaje http en bytes y lo transforma a su HTTPObject correspondiente"
     start_line: bytes = http_message.split(b'\r\n')[0]
     if start_line.startswith(b'HTTP'):
-        return HTTPResponse(http_message)
+        return HTTPResponse().parse(http_message)
     else:
-        return HTTPRequest(http_message)
+        return HTTPRequest().parse(http_message)
 
 def create_http_message(http_obj: HTTPObject)-> bytes:
-    "Crea un mensaje http a partir de un objeto HTTP"
+    "Crea un mensaje http a partir de un objeto HTTP que tenga start_line, head y body"
+    http_obj.head[b"Content-Length"] = bytes(str(len(http_obj.body)), encoding="UTF-8")
+
     message: bytes = b''
     message += http_obj.start_line + b'\r\n'
     for key, val in http_obj.head.items():
         message += key + b': ' + val + b'\r\n'
+    message += b'\r\n'
     message += http_obj.body
+
     return message
-
-def handle_request(http_req: HTTPRequest, settings: dict)-> bytes:
-    "crea un mensaje de respuesta para GET o HEAD"
-    head: bytes = b''
-    body: bytes = b''
-    body_length: int = 0
-    with open("hello.html", encoding="UTF-8") as f_body:
-        body: bytes = bytes(f_body.read(), "UTF-8")
-        body_length = len(body)
-        f_body.close()
-
-        #:v
-
-    #ocupamos un head default
-    with open("http_example_head_1.txt", encoding="UTF-8") as f_head:
-        for head_line in f_head:
-            if head_line.startswith("Content-Length:"):
-                head_line = head_line[:-1] + str(body_length) + '\n'
-            head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
-
-        head += bytes(f"X-ElQuePregunta: {settings["user"]}\r\n", "UTF-8") 
-        f_head.close()
-    head += b'\r\n'
-
-    if http_req.method == b'HEAD':
-        return head
-    elif http_req.method == b'GET':
-        return head+body
 
 if __name__=="__main__":
     example: bytes = b''
@@ -105,9 +98,20 @@ if __name__=="__main__":
             example += bytes(line[:-1], "UTF-8") + b'\r\n'
             print(line)
         f.close()
-        print("--------")
         example += b'\r\n'
 
-    obj_example= HTTPObject(example)
+    obj_example= parse_http_message(example)
+    print("----start line----")
+    print(obj_example.start_line)
+    print("----head----")
     print(obj_example.head)
+    print("----body----")
     print(obj_example.body)
+    print("--------")
+    obj_example_2= HTTPResponse()
+    obj_example_2.start_line= b'HTTP/1.1 200 OK'
+    obj_example_2.head[b"Content-Type"] = b'text/html; charset=UTF-8'
+    with open("hello.html", encoding="UTF-8") as body_file:
+        obj_example_2.body = bytes(body_file.read(), "UTF-8")
+    print(create_http_message(obj_example_2).decode())
+
