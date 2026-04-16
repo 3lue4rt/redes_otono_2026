@@ -1,11 +1,35 @@
 import socket
 import http_handling
+import json
 
 #CONSTANTES
-IP_VM = "192.168.122.197"
+IP_VM = "localhost"
 port = 8000
 vm_address = (IP_VM, port)
 buffer_size = 1024
+settings = {
+    "user": b'',
+    "blocked": [],
+    "forbidden_words": []
+}
+
+# leer los settings
+if __name__=="__main__":
+    with open("settings.json", encoding="UTF-8") as file:
+        settings = json.load(file)
+
+        print("Usuario:", settings["user"])
+
+        print("Páginas bloqueadas:")
+        for site in settings["blocked"]:
+            print("-", site)
+
+        print("Palabras prohibídas:")
+        for word in settings["forbidden_words"]:
+            for key in word:
+                print("-", key)
+        
+        file.close()
 
 print('Creando socket - Servidor ...')
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -27,9 +51,9 @@ while True:
 
     #por mientras para ver si funciona
     if http_obj.start_line.startswith(b'GET') or http_obj.start_line.startswith(b'HEAD'):
-        new_socket.send(http_handling.handle_request(http_obj))
+        new_socket.send(http_handling.handle_request(http_obj, settings))
     #cerramos conección
 
-    #new_socket.close()
+    new_socket.close()
     #print(f"conexión con {new_socket_address} ha sido cerrada")
 

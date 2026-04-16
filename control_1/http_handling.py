@@ -70,7 +70,7 @@ def create_http_message(http_obj: HTTPObject)-> bytes:
     message += http_obj.body
     return message
 
-def handle_request(http_req: HTTPRequest)-> bytes:
+def handle_request(http_req: HTTPRequest, settings: dict)-> bytes:
     "crea un mensaje de respuesta para GET o HEAD"
     head: bytes = b''
     body: bytes = b''
@@ -89,7 +89,7 @@ def handle_request(http_req: HTTPRequest)-> bytes:
                 head_line = head_line[:-1] + str(body_length) + '\n'
             head += bytes(head_line[:-1], "UTF-8") + b'\r\n'
 
-        head += b'X-ElQuePregunta: Benjamin Duarte\r\n'
+        head += bytes(f"X-ElQuePregunta: {settings["user"]}\r\n", "UTF-8") 
         f_head.close()
     head += b'\r\n'
 
