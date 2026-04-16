@@ -3,7 +3,7 @@ import http_handling
 import json
 
 #CONSTANTES
-IP_VM = "localhost"
+IP_VM = "192.168.122.197"
 port = 8000
 vm_address = (IP_VM, port)
 buffer_size = 1024
