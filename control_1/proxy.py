@@ -102,7 +102,10 @@ while True:
     http_response = handle_request(http_request)
     http_response.head[b'X-ElQuePregunta'] = bytes(settings["user"], "UTF-8")
     http_response.body = filter_body(http_response.body)
-    client_socket.send(http_handling.create_http_message(http_response))
+    byte_response = http_handling.create_http_message(http_response)
+    print("enviando el siguiente mensaje:")
+    print(byte_response.decode())
+    client_socket.send(byte_response)
     print("Response enviada")
     #cerramos conección
     client_socket.close()
