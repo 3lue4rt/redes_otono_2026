@@ -3,7 +3,7 @@ import parseDNS
 from dnslib import DNSRecord
 from dnslib.dns import RR, QTYPE, A
 
-IP_VM = "localhost"
+IP_VM = "192.168.122.197"
 root_address = ("192.33.4.12", 53)
 port = 8000
 address = (IP_VM, port)
@@ -26,9 +26,9 @@ print(f"Asociando socket a {address}\n")
 resolver_socket.bind(address)
 
 ## PENDIENTE
-def update_cache(dns_result: parseDNS.DNSObj) -> None:
+def update_cache(dns_result: parseDNS.DNSObj, ip: str) -> None:
     "dado una respuesta dns actualiza el cache con las consultas más frecuentes"
-    last_doms.append((str(dns_result.Qname), str(dns_result.Answer[0].RDATA)))
+    last_doms.append((str(dns_result.Qname), ip))
     if len(last_doms)>last_doms_length:
         last_doms.pop(0)
 
@@ -70,7 +70,7 @@ def resolver(mensaje_consulta: bytes) -> bytes:
         response_cache = DNSRecord.parse(mensaje_consulta)
         response_cache.add_answer(RR(parsed_message.Qname, QTYPE.A, rdata=A(ip)))
         debug(f"actualizando el caché con ({parsed_message.Qname}: {ip})")
-        update_cache(parseDNS.DNSObj(response_cache.pack()))
+        update_cache(parseDNS.DNSObj(response_cache.pack()), ip)
         debug(f"respondiendo con el siguiente mensaje:\n{parseDNS.DNSObj(response_cache.pack())}")
         return response_cache.pack()
 
@@ -92,7 +92,7 @@ def resolver(mensaje_consulta: bytes) -> bytes:
                 if "A"==answer_rr.TYPE:
                     debug(f"Encontré la siguiente ip en Answers: {answer_rr.RDATA}")
                     debug(f"actualizando el caché con ({parsed_message.Qname}: {answer_rr.RDATA})")
-                    update_cache(parseDNS.DNSObj(data))
+                    update_cache(answer, str(answer_rr.RDATA))
                     debug("Enviando respuesta final")
                     return data
         
