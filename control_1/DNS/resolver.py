@@ -1,6 +1,7 @@
 import socket
 import parseDNS
 from dnslib import DNSRecord
+from dnslib.dns import RR, QTYPE, A
 
 IP_VM = "localhost"
 root_address = ("192.33.4.12", 53)
@@ -8,8 +9,10 @@ port = 8000
 address = (IP_VM, port)
 buffer_size = 4096
 show_debug = True
-cache = []
+cache = {}
 last_doms = []
+max_items_in_cache = 3
+last_doms_length = 20
 
 print("----------------------------------------------------")
 print(f"Dirección: {address}")
@@ -23,10 +26,10 @@ print(f"Asociando socket a {address}\n")
 resolver_socket.bind(address)
 
 ## PENDIENTE
-def add_to_cache(dns_result: bytes):
-    parsed = parseDNS.DNSObj(dns_result)
-    last_doms.append((str(parsed.Qname), str(parsed.Answer[0].RDATA)))
-    if len(last_doms)>20:
+def update_cache(dns_result: parseDNS.DNSObj) -> None:
+    "dado una respuesta dns actualiza el cache con las consultas más frecuentes"
+    last_doms.append((str(dns_result.Qname), str(dns_result.Answer[0].RDATA)))
+    if len(last_doms)>last_doms_length:
         last_doms.pop(0)
 
     # Source - https://stackoverflow.com/a/23240989
@@ -34,28 +37,45 @@ def add_to_cache(dns_result: bytes):
     # Retrieved 2026-04-17, License - CC BY-SA 4.0
     count = {dom:last_doms.count(dom) for dom in last_doms}
 
-    # Source - https://stackoverflow.com/a/280156
-    # Posted by A. Coady
-    # Retrieved 2026-04-17, License - CC BY-SA 2.5
-    highest = max(count, key=count.get)
+    #limpiamos el cache
+    cache.clear()
 
-
-    
+    while count != {} and len(cache) < max_items_in_cache:
+        # Source - https://stackoverflow.com/a/280156
+        # Posted by A. Coady
+        # Retrieved 2026-04-17, License - CC BY-SA 2.5
+        highest = max(count, key=count.get)
+        cache[highest[0]] = highest[1]
+        count.pop(highest)
 
 
 
 def debug(msg):
     "print para debuguear, depende de la variable global show_debug"
     if show_debug:
-        print(msg)
+        print("(debug)", msg)
 
 def resolver(mensaje_consulta: bytes) -> bytes:
     "resolver DNS"
+    
     #parseamos la consulta
     parsed_message = parseDNS.DNSObj(mensaje_consulta)
     debug(f"Se ha recibido el siguiente mensaje de consulta:\n{parsed_message}")
 
+    #revisamos el caché
+    debug(f"Revisando cache por {parsed_message.Qname}")
+    if str(parsed_message.Qname) in cache:
+        ip = cache[str(parsed_message.Qname)]
+        debug(f"Encontré el ip {ip} para el dominio {parsed_message.Qname}")
+        response_cache = DNSRecord.parse(mensaje_consulta)
+        response_cache.add_answer(RR(parsed_message.Qname, QTYPE.A, rdata=A(ip)))
+        debug(f"actualizando el caché con ({parsed_message.Qname}: {ip})")
+        update_cache(parseDNS.DNSObj(response_cache.pack()))
+        debug(f"respondiendo con el siguiente mensaje:\n{parseDNS.DNSObj(response_cache.pack())}")
+        return response_cache.pack()
+
     #a.- hacemos la query al servidor raíz 
+    debug("No se encontró en el cache, consultando al servidor raíz ...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.sendto(mensaje_consulta, root_address)
@@ -71,6 +91,8 @@ def resolver(mensaje_consulta: bytes) -> bytes:
             for answer_rr in answer.Answer:
                 if "A"==answer_rr.TYPE:
                     debug(f"Encontré la siguiente ip en Answers: {answer_rr.RDATA}")
+                    debug(f"actualizando el caché con ({parsed_message.Qname}: {answer_rr.RDATA})")
+                    update_cache(parseDNS.DNSObj(data))
                     debug("Enviando respuesta final")
                     return data
         
@@ -117,6 +139,8 @@ def resolver(mensaje_consulta: bytes) -> bytes:
 
         
 while True:
+    debug(f"cache: {cache}")
+    debug(f"Últimos {last_doms_length} dominios consultados:\n{last_doms}")
     print("Esperando nuevo mensaje ...")
     incoming_message, incoming_address = resolver_socket.recvfrom(buffer_size)
     print("Ocupando el resolver ...")
