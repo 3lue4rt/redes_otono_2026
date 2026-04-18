@@ -3,7 +3,7 @@ import parseDNS
 from dnslib import DNSRecord
 from dnslib.dns import RR, QTYPE, A
 
-IP_VM = "192.168.122.197"
+IP_VM = "localhost"
 root_address = ("192.33.4.12", 53)
 port = 8000
 address = (IP_VM, port)
@@ -55,24 +55,25 @@ def debug(msg):
     if show_debug:
         print("(debug)", msg)
 
-def resolver(mensaje_consulta: bytes) -> bytes:
+def resolver(mensaje_consulta: bytes, use_cache: bool) -> bytes:
     "resolver DNS"
     
     #parseamos la consulta
     parsed_message = parseDNS.DNSObj(mensaje_consulta)
     debug(f"Se ha recibido el siguiente mensaje de consulta:\n{parsed_message}")
 
-    #revisamos el caché
-    debug(f"Revisando cache por {parsed_message.Qname}")
-    if str(parsed_message.Qname) in cache:
-        ip = cache[str(parsed_message.Qname)]
-        debug(f"Encontré el ip {ip} para el dominio {parsed_message.Qname}")
-        response_cache = DNSRecord.parse(mensaje_consulta)
-        response_cache.add_answer(RR(parsed_message.Qname, QTYPE.A, rdata=A(ip)))
-        debug(f"actualizando el caché con ({parsed_message.Qname}: {ip})")
-        update_cache(parseDNS.DNSObj(response_cache.pack()), ip)
-        debug(f"respondiendo con el siguiente mensaje:\n{parseDNS.DNSObj(response_cache.pack())}")
-        return response_cache.pack()
+    if use_cache:
+        #revisamos el caché
+        debug(f"Revisando cache por {parsed_message.Qname}")
+        if str(parsed_message.Qname) in cache:
+            ip = cache[str(parsed_message.Qname)]
+            debug(f"Encontré el ip {ip} para el dominio {parsed_message.Qname}")
+            response_cache = DNSRecord.parse(mensaje_consulta)
+            response_cache.add_answer(RR(parsed_message.Qname, QTYPE.A, rdata=A(ip)))
+            debug(f"actualizando el caché con ({parsed_message.Qname}: {ip})")
+            update_cache(parseDNS.DNSObj(response_cache.pack()), ip)
+            debug(f"respondiendo con el siguiente mensaje:\n{parseDNS.DNSObj(response_cache.pack())}")
+            return response_cache.pack()
 
     #a.- hacemos la query al servidor raíz 
     debug("No se encontró en el cache, consultando al servidor raíz ...")
@@ -116,19 +117,28 @@ def resolver(mensaje_consulta: bytes) -> bytes:
                     break
 
             if not answer_in_additional:
-                debug("No encontré respuesta en additional, cambiando Name Server")
-                # tomo el nombre de un NS y lo resuelvo recursivamente
-                new_query = resolver(bytes(DNSRecord.question(str(answer.Qname)).pack()))
-                # sacamos la ip de la resolución
-                new_ip = parseDNS.DNSObj(new_query).Answer[0].RDATA
-                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                try:
-                    sock.sendto(mensaje_consulta, (new_ip, 53))
-                    data, _ = sock.recvfrom(4096)
-                    answer = parseDNS.DNSObj(data)
-                    debug(f"Se obtuvo una respuesta de {new_ip}:\n{answer}")
-                finally:
-                    sock.close()
+                ns_in_auth = False
+                for auth_rr in answer.Authority:
+                    if "NS"==auth_rr.TYPE:
+                        debug("No encontré respuesta en additional, cambiando Name Server")
+                        # tomo el nombre de un NS y lo resuelvo recursivamente
+                        new_query = resolver(bytes(DNSRecord.question(str(answer.Authority[0].RDATA)).pack()), False)
+                        # sacamos la ip de la resolución
+                        new_ip = str(parseDNS.DNSObj(new_query).Answer[0].RDATA)
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        try:
+                            sock.sendto(mensaje_consulta, (new_ip, 53))
+                            data, _ = sock.recvfrom(4096)
+                            answer = parseDNS.DNSObj(data)
+                            debug(f"Se obtuvo una respuesta de {new_ip}:\n{answer}")
+                            ns_in_auth = True
+                        finally:
+                            sock.close()
+                        break
+                #caso en que no hay respuesta, ni mensaje de tipo NS en Auth
+                if not ns_in_auth:
+                    debug("No encontre un NS ni un A")
+                    return data
 
 
         #d.- Ignoramos si no hay en answers ni authority
@@ -144,7 +154,7 @@ while True:
     print("Esperando nuevo mensaje ...")
     incoming_message, incoming_address = resolver_socket.recvfrom(buffer_size)
     print("Ocupando el resolver ...")
-    response = resolver(incoming_message)
+    response = resolver(incoming_message, True)
     resolver_socket.sendto(response, incoming_address)
     print("Request resuelto\n\n\n")
     
