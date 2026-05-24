@@ -1,5 +1,5 @@
 import socket
-import time
+import SocketTCP
 
 print("abriendo socket")
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -19,7 +19,8 @@ try:
     while True:
         print("esperando mensajes...")
         incoming_message, incoming_address = s.recvfrom(PACKET_SIZE_MAX)
-        print(f"Se ha recibido:\n{incoming_message}\n de la dirección {incoming_address}\ntiempo: {time.time()}")
+        segment = SocketTCP.SocketTCP.parse_segment(incoming_message)
+        print(f"Se ha recibido el siguiente mensaje con su header:\n {segment}")
         print("---------------------------------------")
 finally:
     print("\nCerrando, bye bye")
