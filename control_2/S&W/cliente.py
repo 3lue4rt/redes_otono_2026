@@ -28,24 +28,26 @@ message: bytes = sys.stdin.buffer.read()
 
 debug(f"Leído el siguiente mensaje:\n{message}")
 
-debug(f"Descomponiendo el mensaje en paquetes de {PACKET_SIZE_MAX} bytes y envolviendolo en un header")
+""" debug(f"Descomponiendo el mensaje en paquetes de {PACKET_SIZE_MAX} bytes y envolviendolo en un header")
 paquetes: list[bytes] = []
 for i in range(0, len(message), PACKET_SIZE_MAX):
     paquete = SocketTCP.Segment(True, True, True, 2**13 - 1, message[i:i+PACKET_SIZE_MAX-2])
-    paquetes += [SocketTCP.SocketTCP.create_segment(paquete)]
+    paquetes += [SocketTCP.SocketTCP.create_segment(paquete)] """
 
-if len(paquetes)>=3:
+""" if len(paquetes)>=3:
     debug(f"Los primeros 3 paquetes son {paquetes[0:3]}")
 else:
-    debug(f"Los paquetes a enviar son {paquetes}")
+    debug(f"Los paquetes a enviar son {paquetes}") """
 
 debug(f"abriendo un 'socket' TCP")
-s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s = SocketTCP.SocketTCP()
 
 try:
-    debug(f"Enviando paquetes...")
+    """ debug(f"Enviando paquetes...")
     for paquete in paquetes:
         debug(f"Enviando {SocketTCP.SocketTCP.parse_segment(paquete)}")
-        s.sendto(paquete, ADDRESS)
+        s.sendto(paquete, ADDRESS) """
+    s.connect(ADDRESS)
+    
 finally:
-    s.close()
+    s.socket_udp.close()
