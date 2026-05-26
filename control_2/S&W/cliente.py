@@ -20,24 +20,10 @@ def debug(msg: object):
     print(msg) if args.debug else None
 
 ADDRESS: tuple[str, int] = (args.IP, args.puerto)
-PACKET_SIZE_MAX = 16
 
-debug(f"Enviando a {ADDRESS}\nTamaño máximo de paquete {PACKET_SIZE_MAX} bytes")
+debug(f"Enviando a {ADDRESS}")
 
 message: bytes = sys.stdin.buffer.read()
-
-debug(f"Leído el siguiente mensaje:\n{message}")
-
-""" debug(f"Descomponiendo el mensaje en paquetes de {PACKET_SIZE_MAX} bytes y envolviendolo en un header")
-paquetes: list[bytes] = []
-for i in range(0, len(message), PACKET_SIZE_MAX):
-    paquete = SocketTCP.Segment(True, True, True, 2**13 - 1, message[i:i+PACKET_SIZE_MAX-2])
-    paquetes += [SocketTCP.SocketTCP.create_segment(paquete)] """
-
-""" if len(paquetes)>=3:
-    debug(f"Los primeros 3 paquetes son {paquetes[0:3]}")
-else:
-    debug(f"Los paquetes a enviar son {paquetes}") """
 
 debug(f"abriendo un 'socket' TCP")
 s = SocketTCP.SocketTCP()
@@ -48,6 +34,14 @@ try:
         debug(f"Enviando {SocketTCP.SocketTCP.parse_segment(paquete)}")
         s.sendto(paquete, ADDRESS) """
     s.connect(ADDRESS)
-    
+    # test 1
+    message = "Mensje de len=16".encode()
+    s.send(message)
+    # test 2
+    message = "Mensaje de largo 19".encode()
+    s.send(message)
+    # test 3
+    message = "Mensaje de largo 19".encode()
+    s.send(message)
 finally:
     s.socket_udp.close()
