@@ -1,4 +1,3 @@
-import socket
 import argparse
 import sys
 import SocketTCP
@@ -21,27 +20,23 @@ def debug(msg: object):
 
 ADDRESS: tuple[str, int] = (args.IP, args.puerto)
 
-debug(f"Enviando a {ADDRESS}")
-
+""" debug(f"Enviando a {ADDRESS}:")
 message: bytes = sys.stdin.buffer.read()
 
 debug(f"abriendo un 'socket' TCP")
 s = SocketTCP.SocketTCP()
 
 try:
-    """ debug(f"Enviando paquetes...")
-    for paquete in paquetes:
-        debug(f"Enviando {SocketTCP.SocketTCP.parse_segment(paquete)}")
-        s.sendto(paquete, ADDRESS) """
     s.connect(ADDRESS)
-    # test 1
-    message = "Mensje de len=16".encode()
-    s.send(message)
-    # test 2
-    message = "Mensaje de largo 19".encode()
-    s.send(message)
-    # test 3
-    message = "Mensaje de largo 19".encode()
     s.send(message)
 finally:
-    s.socket_udp.close()
+    s.close()
+ """
+#Stress test
+print("EMPEZANDO EL STRESS TEST")
+for i in range(10):
+    print(f"-------------SOCKET N°{i}--------------")
+    s = SocketTCP.SocketTCP()
+    s.connect(ADDRESS)
+    s.send(f'ola, soy el socket {i}'.encode())
+    s.close()
