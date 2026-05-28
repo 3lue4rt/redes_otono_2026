@@ -20,20 +20,23 @@ def debug(msg: object):
 
 ADDRESS: tuple[str, int] = (args.IP, args.puerto)
 
-debug(f"Enviando a {ADDRESS}:")
-message: bytes = sys.stdin.buffer.read()
+#debug(f"Enviando a {ADDRESS}:")
+#message: bytes = sys.stdin.buffer.read()
 
-debug(f"abriendo un 'socket' TCP")
+""" debug(f"abriendo un 'socket' TCP")
 s = SocketTCP.SocketTCP()
 s.connect(ADDRESS)
 s.send(message)
-s.close()
+s.close() """
 
-""" #Stress test
+#Stress test (asegurarse de que TIMEOUT_TIME sea bajo y no ocupar delay, solo loss)
 print("EMPEZANDO EL STRESS TEST")
-for i in range(10):
+for i in range(1000):
     print(f"-------------SOCKET N°{i}--------------")
     s = SocketTCP.SocketTCP()
     s.connect(ADDRESS)
+    print(f"Socket {i} conectado")
     s.send(f'ola, soy el socket {i}'.encode())
-    s.close() """
+    print("Mensaje enviado")
+    s.close()
+    print(f"Socket {i} cerrado")

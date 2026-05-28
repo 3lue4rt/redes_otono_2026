@@ -21,13 +21,15 @@ s = SocketTCP.SocketTCP()
 print("binding a la dirección", ADDRESS)
 s.bind(ADDRESS)
 
-connection_socketTCP, new_address = s.accept()
+""" connection_socketTCP, new_address = s.accept()
 _ = connection_socketTCP.recv(501)
 _ = connection_socketTCP.recv(501)
-connection_socketTCP.recv_close()
+connection_socketTCP.recv_close() """
 
-""" for i in range(10):
+for i in range(1000):
     print(f"-------------SOCKET N°{i}--------------")
     connection_socketTCP, new_address = s.accept()
-    print(f"Socket {i} recibió: {connection_socketTCP.recv(4)}")
-    connection_socketTCP.recv_close() """
+    print(f"Socket {i} conectado")
+    print(f"Socket {i} recibió: {connection_socketTCP.recv(100)}")
+    connection_socketTCP.recv_close()
+    print(f"Socket {i} cerrado")

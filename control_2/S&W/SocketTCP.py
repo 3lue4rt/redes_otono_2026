@@ -2,11 +2,18 @@ import socket
 from random import randint
 
 DEBUG_FLAG = False
-TCP_HEADER_SIZE = 2 #bytes
-PACKET_SIZE_MAX = 16 + TCP_HEADER_SIZE #bytes
-TIMEOUT_TIME = 2 #segundos
+TCP_HEADER_SIZE = 2 #tamaño en bytes del header
+PACKET_SIZE_MAX = 16 + TCP_HEADER_SIZE #tamaño en bytes de los segmentos
+TIMEOUT_TIME = 3 #segundos (0.01 segundos para el stress test)
 CONNECTION_TIME = 1 #segundos
-MAX_TRIES = 3 #intentos antes de rendirse
+MAX_TRIES = 3 #intentos antes de rendirse en close() y recv_close()
+HANDSHAKE_TRIES = 3 #intentos antes de rendirse en accept() y volver al paso 1
+HANDSHAKE_CONNECT_TRIES = 3 #n° de tercer handshake para terminar connect()
+ACK_SPAM = 3 #cantidad de mensajes ACK finales de recv()
+
+#caso borde a mencionar, si el n° de secuencia hace overflow se muere todo
+#problema que me pasó: stress test, socket 1 pierde su primer handshake, hace otro, SOCKET 2 COMO 50 SEGMENTOS DESPUES recibe el handshake perdido del socket 1, deadlock
+#otro problema comun del stress test, el recv_close() queda en deadlock pq el close() termina siempre
 
 #función debugueadora, printea si el DEBUG_FLAG es True
 debug_counter = 1
@@ -106,7 +113,7 @@ class SocketTCP:
             try:
                 #segundo handshake
                 debug("Recibiendo el segundo handshake")
-                handshake_2, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+                handshake_2, incoming_address = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
 
             except TimeoutError:
                 debug(f"Se demoró mucho el handshake 2")
@@ -136,8 +143,10 @@ class SocketTCP:
                                                   FIN=False, 
                                                   seq=self.seq, 
                                                   data=bytes()))
-        debug("Mandando el tercer handshake")
-        self.socket_udp.sendto(handshake_3, incoming_address)
+        debug("Mandando el tercer handshake 3")
+        for i in range(HANDSHAKE_CONNECT_TRIES):
+            debug(f"Mandando el tercer handshake ({i})")
+            self.socket_udp.sendto(handshake_3, incoming_address)
 
         debug(f"Ahora me comunico con {incoming_address} (ojalá, se confirma en el send())")
         self.direccion_destino = incoming_address
@@ -152,7 +161,7 @@ class SocketTCP:
         while True:
 
             debug("Recibiendo el primer handshake (tiempo infinito de espera)")
-            handshake_1, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+            handshake_1, incoming_address = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
 
             debug("Recibí un segmento, parseando ...")
             parsed_shake = self.parse_segment(handshake_1)
@@ -180,14 +189,14 @@ class SocketTCP:
 
         handshake_2_tries = 1 #solo debug
         #Sigo mandando el handshake 2 hasta recibir el 3
-        while True:
+        while handshake_2_tries<HANDSHAKE_TRIES:
 
             debug(f"Enviando el segundo handshake con el nuevo socket (intento {handshake_2_tries})")
             new_sock.socket_udp.sendto(handshake_2, incoming_address)
             #esperamos el tercer handshake
             
             try:
-                handshake_3, incoming_address = new_sock.socket_udp.recvfrom(TCP_HEADER_SIZE)
+                handshake_3, incoming_address = new_sock.socket_udp.recvfrom(PACKET_SIZE_MAX)
                 debug("Recibiendo el tercer handshake")
                 
             except TimeoutError:
@@ -205,11 +214,10 @@ class SocketTCP:
                 continue
             else:
                 self.seq = parsed_shake.seq
-                debug(f"Tercer handshake en orden, actualizando el n° de secuencia {self.seq}")
+                debug(f"Tercer handshake en orden, actualizando el n° de secuencia a {self.seq}")
                 break
         else:
-            #deprecated
-            debug(f"Ya llegué a {MAX_TRIES} intentos, abortando y volviendo al handshake 1")
+            debug(f"Ya llegué a {HANDSHAKE_TRIES} intentos, abortando y volviendo al handshake 1")
             self.seq = None
             return self.accept()
         
@@ -347,7 +355,7 @@ class SocketTCP:
         self.socket_udp.settimeout(None)
 
         #el tamaño de paquete varía si buff_size es muy pequeño
-        packet_size = min(PACKET_SIZE_MAX, buff_size)+TCP_HEADER_SIZE
+        packet_size = min(PACKET_SIZE_MAX, buff_size+TCP_HEADER_SIZE)
         response = None
         message = bytes()
         seg_index = 0
@@ -417,7 +425,7 @@ class SocketTCP:
 
                 if self.bytes_left_to_read==0:
                     debug("Ya no me quedan bytes pa leer, voy a espamear ACKs para que el se de cuenta y termine")
-                    for _ in range(MAX_TRIES):
+                    for _ in range(ACK_SPAM):
                         self.socket_udp.sendto(response, self.direccion_destino)
                     break
 
@@ -435,6 +443,7 @@ class SocketTCP:
         return message
 
     def close(self):
+        "Cierra la conección con el servidor"
         if self.seq == None or self.direccion_destino==None:
             debug("El socket nunca se conecto a un server, abortando")
             return
@@ -445,50 +454,99 @@ class SocketTCP:
                                                 FIN=True, 
                                                 seq=self.seq, 
                                                 data=bytes()))
-        debug("Mandando el primer goodbye")
-        self.socket_udp.sendto(goodbye_1, self.direccion_destino)
-        #recibir segundo goodbye
-        debug("Recibiendo el segundo goodbye")
-        goodbye_2, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
-        parsed_bye = self.parse_segment(goodbye_2)
-        #aquí verificar que el parsed goodbye es correcto
-        # ...
-        self.seq = parsed_bye.seq + 1
-        #mandar tercer goodbye
-        debug("Creando el tercer goodbye")
-        goodbye_3 = self.create_segment(Segment(SYN=False, 
-                                                ACK=True, 
-                                                FIN=False, 
-                                                seq=self.seq, 
-                                                data=bytes()))
-        self.socket_udp.sendto(goodbye_3, self.direccion_destino)
+        
+        self.socket_udp.settimeout(TIMEOUT_TIME)
+
+        goodbye_tries = 1
+        while goodbye_tries<=MAX_TRIES:
+            debug(f"Mandando el primer goodbye (intento {goodbye_tries})")
+            self.socket_udp.sendto(goodbye_1, self.direccion_destino)
+            
+            try:
+                debug("Recibiendo el segundo goodbye")
+                goodbye_2, _ = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+
+            except TimeoutError:
+                debug("No obtuve segundo goodbye, intentando de nuevo")
+                goodbye_tries+=1
+                continue
+
+            debug("Llegó un segmento, parseando ...")
+            parsed_bye = self.parse_segment(goodbye_2)
+
+            if parsed_bye.is_goodbye_2() and parsed_bye.seq==self.seq+1:
+                debug("Llegó el goodbye 2")
+                self.seq = parsed_bye.seq + 1
+
+                debug("Creando el tercer goodbye")
+                goodbye_3 = self.create_segment(Segment(SYN=False, 
+                                                        ACK=True, 
+                                                        FIN=False, 
+                                                        seq=self.seq, 
+                                                        data=bytes()))
+                
+                for ack_tries in range(ACK_SPAM):
+                    debug(f"Enviando el tercer goodbye (intento {ack_tries+1})")
+                    self.socket_udp.sendto(goodbye_3, self.direccion_destino)
+                    try:
+                        _, _ = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+                    except TimeoutError:
+                        continue
+                break
+
         #deleteamos el seq y la dirección
         self.seq = None
         self.direccion_destino = None
         debug("He cerrado la connección del lado del cliente")
 
     def recv_close(self):
+        "Cierra la conección con el cliente"
         if self.seq == None or self.direccion_destino==None:
-            debug("El socket no está conectado a un server, abortando")
+            debug("El socket no está conectado a un cliente, abortando")
             return
-        #recibir primer goodbye
-        debug("Recibiendo el primer goodbye")
-        goodbye_1, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
-        parsed_bye = self.parse_segment(goodbye_1)
-        self.seq = parsed_bye.seq + 1
-        #mandar el segundo goodbye
+        
+        #Esperamos un mensaje 
+        self.socket_udp.settimeout(None)
+        while True:
+            debug("Recibiendo el primer goodbye")
+            goodbye_1, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+            debug("Llegó un segmento, parseando ...")
+            parsed_bye = self.parse_segment(goodbye_1)
+
+            if parsed_bye.is_goodbye_1():
+                debug("Llegó el primer goodbye")
+                self.seq = parsed_bye.seq + 1
+                break
+
+        self.socket_udp.settimeout(TIMEOUT_TIME)
         debug("Creando el segundo goodbye")
         goodbye_1 = self.create_segment(Segment(SYN=False, 
-                                                ACK=True, 
-                                                FIN=True, 
-                                                seq=self.seq, 
-                                                data=bytes()))
-        debug("Mandando el segundo goodbye")
-        self.socket_udp.sendto(goodbye_1, self.direccion_destino)
-        #recibir el tercer goodbye
-        debug("Recibiendo el tercer goodbye")
-        goodbye_3, incoming_address = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
-        parsed_bye = self.parse_segment(goodbye_3)
+                                        ACK=True, 
+                                        FIN=True, 
+                                        seq=self.seq, 
+                                        data=bytes()))
+        
+        for ack_tries in range(MAX_TRIES):
+
+            debug(f"Mandando el segundo goodbye (intento {ack_tries+1})")
+            self.socket_udp.sendto(goodbye_1, self.direccion_destino)
+
+            try:
+                debug("Recibiendo el tercer goodbye")
+                goodbye_3, _ = self.socket_udp.recvfrom(TCP_HEADER_SIZE)
+
+            except TimeoutError:
+                debug("No llegó el tercer goodbye, intentando de nuevo")
+                continue
+                
+            debug("Llegó un segmento, parseando ...")
+            parsed_bye = self.parse_segment(goodbye_3)
+
+            if parsed_bye.is_goodbye_3() and parsed_bye.seq==self.seq+1:
+                debug("Llegó el tercer goodbye")
+                break
+
+        #deleteamos el seq y la dirección
         self.seq = None
         self.direccion_destino = None
         debug("He cerrado la connección del lado del servidor")
