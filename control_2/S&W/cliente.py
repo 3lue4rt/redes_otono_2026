@@ -20,23 +20,20 @@ def debug(msg: object):
 
 ADDRESS: tuple[str, int] = (args.IP, args.puerto)
 
-""" debug(f"Enviando a {ADDRESS}:")
+debug(f"Enviando a {ADDRESS}:")
 message: bytes = sys.stdin.buffer.read()
 
 debug(f"abriendo un 'socket' TCP")
 s = SocketTCP.SocketTCP()
+s.connect(ADDRESS)
+s.send(message)
+s.close()
 
-try:
-    s.connect(ADDRESS)
-    s.send(message)
-finally:
-    s.close()
- """
-#Stress test
+""" #Stress test
 print("EMPEZANDO EL STRESS TEST")
 for i in range(10):
     print(f"-------------SOCKET N°{i}--------------")
     s = SocketTCP.SocketTCP()
     s.connect(ADDRESS)
     s.send(f'ola, soy el socket {i}'.encode())
-    s.close()
+    s.close() """

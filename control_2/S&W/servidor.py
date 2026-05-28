@@ -1,4 +1,3 @@
-import socket
 import SocketTCP
 import argparse
 
@@ -22,8 +21,13 @@ s = SocketTCP.SocketTCP()
 print("binding a la dirección", ADDRESS)
 s.bind(ADDRESS)
 
-for i in range(10):
+connection_socketTCP, new_address = s.accept()
+_ = connection_socketTCP.recv(501)
+_ = connection_socketTCP.recv(501)
+connection_socketTCP.recv_close()
+
+""" for i in range(10):
     print(f"-------------SOCKET N°{i}--------------")
     connection_socketTCP, new_address = s.accept()
     print(f"Socket {i} recibió: {connection_socketTCP.recv(4)}")
-    connection_socketTCP.recv_close()
+    connection_socketTCP.recv_close() """

@@ -6,7 +6,7 @@ TCP_HEADER_SIZE = 2 #bytes
 PACKET_SIZE_MAX = 16 + TCP_HEADER_SIZE #bytes
 TIMEOUT_TIME = 2 #segundos
 CONNECTION_TIME = 1 #segundos
-MAX_TRIES = 3 #intentos antes de rendirse (deprecado)
+MAX_TRIES = 3 #intentos antes de rendirse
 
 #función debugueadora, printea si el DEBUG_FLAG es True
 debug_counter = 1
@@ -30,6 +30,8 @@ class SocketTCP:
         #N° que indíca la cantidad de bytes que le queda al socket
         #por leer de un mensaje a medio recibir.
         self.bytes_left_to_read: int = 0
+        #
+        self.last_segment_sent: bytes | None = None
 
     @staticmethod
     def parse_segment(segment: bytes) -> Segment:
@@ -123,11 +125,6 @@ class SocketTCP:
                 self.seq = parsed_shake.seq + 1
                 debug(f"Segundo handshake en orden, actualizando el n° de secuencia {self.seq}")
                 break
-        else:
-            #deprecated
-            debug(f"ya llegué a {MAX_TRIES} intentos, abortando el handshake 1")
-            self.seq = None
-            return
 
         #se que me llegó el handshake 2, actualizo el n° de secuencia
         self.seq = parsed_shake.seq + 1
@@ -231,6 +228,10 @@ class SocketTCP:
             debug("El socket nunca se conectó a algún servidor, abortando send")
             return
         
+        if message==bytes():
+            debug("No voy a mandar un mensaje vacío")
+            return
+        
         #Timeouts por si no habían
         self.socket_udp.settimeout(TIMEOUT_TIME)
 
@@ -250,19 +251,21 @@ class SocketTCP:
         while True:
             debug("Mandando segmento 0")
             self.socket_udp.sendto(segmento_0, self.direccion_destino)
-            debug("Recibiendo respuesta")
+
             try:
                 debug("Recibiendo respuesta")
                 response_0, _ = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
+
             except TimeoutError:
                 debug("No recibí ningun mensaje por segmento 0")
                 continue
+
             debug(f"Recibí respuesta, parseando ...")
             parsed_response = self.parse_segment(response_0)
 
             #si no recibió el handshake 2 hay que mandar el 3 y el segmento 0
-            if parsed_response.is_handshake_2:
-                debug("Recibí el 2do handshale (OH NO)")
+            if parsed_response.is_handshake_2():
+                debug("Recibí el 2do handshake (OH NO)")
                 debug("Creando el tercer handshake")
                 handshake_3 = self.create_segment(Segment(SYN=False, 
                                                         ACK=True, 
@@ -272,7 +275,8 @@ class SocketTCP:
                 debug("Mandando el tercer handshake")
                 self.socket_udp.sendto(handshake_3, self.direccion_destino)
                 continue
-            if parsed_response.is_ack_message() and parsed_response==self.seq + message_length:
+            #Si recibieron el segmento 0 puedo empezar a mandar el mensaje
+            if parsed_response.is_ack_message() and parsed_response.seq==self.seq + len(str(message_length)):
                 debug("El segmento 0 fue recibido, empezando a mandar el mensaje")
                 self.seq = parsed_response.seq
                 break
@@ -313,7 +317,7 @@ class SocketTCP:
 
                 if parsed_response.is_ack_message():
                     segment_start += parsed_response.seq - self.seq #lo que leyó el receptor
-                    debug(f"El receptor ha leído {segment_start} bytes")
+                    debug(f"El receptor leyó {parsed_response.seq - self.seq} bytes")
                     self.seq = parsed_response.seq
                     debug_index += 1
                     break
@@ -334,82 +338,97 @@ class SocketTCP:
         if self.seq==None or self.direccion_destino==None:
             debug("El socket nunca se conectó a algún cliente, abortando recv")
             return bytes()
-        
-        #Espera infinito por el segmento 0
-        self.socket_udp.settimeout(None)
-        
-        #ver si estoy esperando un mensaje nuevo o estoy en proceso de recibir uno
-        #recibir el segmento 0 para obtener message_length
-        while True:
-            debug("Esperando segmento 0")
-            segmento_0, _ = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
-            debug("LLegó un segmento, parseando ...")
-            parsed_segmento_0 = self.parse_segment(segmento_0)
 
-            #si coincidimos en el n° de seq y estoy esperando el segmento 0
-            if parsed_segmento_0.is_std_message() and parsed_segmento_0.seq==self.seq:
-                debug("Me llegó el segmento 0")
-                #message_length
-                self.bytes_left_to_read = int(parsed_segmento_0.data.decode())
+        if buff_size<1:
+            debug("El buffer tiene que ser un n° mayor a 0")
+            return bytes()
+        
+        #Espera infinito por el segmento 0, de ahí actualizamos
+        self.socket_udp.settimeout(None)
+
+        #el tamaño de paquete varía si buff_size es muy pequeño
+        packet_size = min(PACKET_SIZE_MAX, buff_size)+TCP_HEADER_SIZE
+        response = None
+        message = bytes()
+        seg_index = 0
+        while len(message)<buff_size:
+            debug(f"Esperando el segmento {seg_index}")
+            try:
+                if seg_index==0:
+                    #ocupamos el tamaño máximo, no sabemos cuanto mide el segmento 0
+                    segmento, _ = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
+                else:
+                    #Para el resto de segmentos ocupamos el tamaño indicado
+                    segmento, _ = self.socket_udp.recvfrom(packet_size)
+
+            except TimeoutError:
+                debug(f"Nunca me llegó el segmento {seg_index} :(")
+                continue
+
+            debug("Llegó un segmento, parseando ...")
+            parsed_segmento = self.parse_segment(segmento)
+
+            #si no me quedan bytes por leer, estoy esperando un segmento 0
+            if parsed_segmento.is_std_message() and self.bytes_left_to_read==0:
+                debug(f"Me llegó el segmento 0 que tiene la data: {parsed_segmento.data}, tratando de interpretar ...")
+                self.bytes_left_to_read = int(parsed_segmento.data.decode())
 
                 debug(f"Tengo que leer {self.bytes_left_to_read} bytes")
-                self.seq = parsed_segmento_0.seq
-                response_0 = self.create_segment(Segment(SYN=False,
+                self.seq = parsed_segmento.seq + len(parsed_segmento.data)
+                response = self.create_segment(Segment(SYN=False,
                                                         ACK=True,
                                                         FIN=False,
                                                         seq=self.seq,
                                                         data=bytes()))
-                self.socket_udp.sendto(response_0, self.direccion_destino)
+                debug("Mandando ACK del segmento 0")
+                self.socket_udp.sendto(response, self.direccion_destino)
+                self.last_segment_sent = response
+                seg_index+=1
+                #ahora el resto de segmentos tienen timeout
+                self.socket_udp.settimeout(TIMEOUT_TIME)
+                continue
 
-            if parsed_segmento_0.is_std_message() and parsed_segmento_0.seq<self.seq:
-                debug("Ya recibí el segmento 0, pero el receptor no recibió respuesta")
-                response_0 = self.create_segment(Segment(SYN=False,
-                                                         ACK=True,
-                                                         FIN=False,
-                                                         seq=self.seq,
-                                                         data=bytes()))
-                self.socket_udp.sendto(response_0, self.direccion_destino)
-                debug("Mandando respuesta del segmento 0 hasta que llegue")
-                while True:
-                    self.socket_udp.sendto(response_0, self.direccion_destino)
-                    segmento, _ = self.socket_udp.recvfrom(PACKET_SIZE_MAX)
-                    parsed_segmento = self.parse_segment(segmento)
-                    if parsed_segmento.is_std_message() and parsed_segmento.seq==self.seq:
-                        debug("Logramos coincidir")
-                        #aquí mandamos una ACK dicendo que no leimos nada, a la proxima leemos algo con las siguientes iteraciones
-                        self.socket_udp.sendto(response_0, self.direccion_destino)
-                        break
-                break
+            #si vamos a la par y todavía me quedan bytes por leer
+            if parsed_segmento.is_std_message() and parsed_segmento.seq==self.seq and self.bytes_left_to_read>0:
+                debug(f"Me llegó el segmento {seg_index}")
+                data_read = len(parsed_segmento.data)
+                debug(f"Recibí {data_read} bytes de data y me quedan {buff_size-len(message)} bytes de buffer")
 
-        packet_size = min(PACKET_SIZE_MAX, buff_size)+TCP_HEADER_SIZE
-        message = bytes()
-        debug_index = 1
-        while len(message)<buff_size:
-            debug(f"Esperando el segmento {debug_index}")
-            try:
-                segmento, incoming_address = self.socket_udp.recvfrom(packet_size)
-            except TimeoutError:
-                debug(f"Nunca me llegó el segmento {debug_index} :(")
-                return message
-            parsed_segmento = self.parse_segment(segmento)
-            data_read = len(parsed_segmento.data)
-            debug(f"Recibí {data_read} bytes de data")
-            self.seq += data_read
-            message += parsed_segmento.data
-            debug(f"El mensaje hasta ahora es {message}")
-            self.bytes_left_to_read -= data_read
-            debug(f"Me quedan {self.bytes_left_to_read} bytes a leer")
-            debug(f"Creando response {debug_index}")
-            response = self.create_segment(Segment(SYN=False,
-                                                   ACK=True,
-                                                   FIN=False,
-                                                   seq=self.seq,
-                                                   data=bytes()))
-            self.socket_udp.sendto(response, self.direccion_destino)
-            debug_index += 1
-            if self.bytes_left_to_read==0:
-                debug("Ya no me quedan bytes pa leer, retornando el wey")
-                break
+                #si la data que recibimos supera el buffer
+                if len(message)+data_read>buff_size:
+                    debug("Manejando buffer overflow")
+                    data_read = buff_size - len(message)
+
+                self.seq += data_read
+                message += parsed_segmento.data[0:data_read]
+                debug(f"El mensaje hasta ahora es {message}")
+
+                self.bytes_left_to_read -= data_read
+                debug(f"Me quedan {self.bytes_left_to_read} bytes por leer")
+                debug(f"Creando respuesta {seg_index}")
+                response = self.create_segment(Segment(SYN=False,
+                                                       ACK=True,
+                                                       FIN=False,
+                                                       seq=self.seq,
+                                                       data=bytes()))
+                self.socket_udp.sendto(response, self.direccion_destino)
+                self.last_segment_sent = response
+                seg_index += 1
+
+                if self.bytes_left_to_read==0:
+                    debug("Ya no me quedan bytes pa leer, voy a espamear ACKs para que el se de cuenta y termine")
+                    for _ in range(MAX_TRIES):
+                        self.socket_udp.sendto(response, self.direccion_destino)
+                    break
+
+                continue
+
+            #si nos descoordinamos voy a mandar la respuesta anterior
+            if parsed_segmento.is_std_message() and parsed_segmento.seq<self.seq and self.last_segment_sent:
+                debug("Parece que el receptor no recibió nuestra respuesta anterior, mandando de nuevo")
+                self.socket_udp.sendto(self.last_segment_sent, self.direccion_destino)
+                continue
+
         
         self.socket_udp.settimeout(None)
         debug(f"Retornando {message} con {self.bytes_left_to_read} bytes restantes")
