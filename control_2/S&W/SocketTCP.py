@@ -4,7 +4,7 @@ from random import randint
 DEBUG_FLAG = False
 TCP_HEADER_SIZE = 2 #tamaño en bytes del header
 PACKET_SIZE_MAX = 16 + TCP_HEADER_SIZE #tamaño en bytes de los segmentos
-TIMEOUT_TIME = 3 #segundos (0.01 segundos para el stress test)
+TIMEOUT_TIME = 3 #segundos (recomiendo 0.01 segundos para el stress test)
 CONNECTION_TIME = 1 #segundos
 MAX_TRIES = 3 #intentos antes de rendirse en close() y recv_close()
 HANDSHAKE_TRIES = 3 #intentos antes de rendirse en accept() y volver al paso 1
@@ -377,7 +377,7 @@ class SocketTCP:
             parsed_segmento = self.parse_segment(segmento)
 
             #si no me quedan bytes por leer, estoy esperando un segmento 0
-            if parsed_segmento.is_std_message() and self.bytes_left_to_read==0:
+            if parsed_segmento.is_std_message() and self.bytes_left_to_read==0 and parsed_segmento.seq==self.seq:
                 debug(f"Me llegó el segmento 0 que tiene la data: {parsed_segmento.data}, tratando de interpretar ...")
                 self.bytes_left_to_read = int(parsed_segmento.data.decode())
 
