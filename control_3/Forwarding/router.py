@@ -1,6 +1,7 @@
 import argparse
 import socket
 import Packet
+import time
 
 USAGE = "python router.py router_IP router_puerto router_rutas [FLAGS]"
 DESCRIPTION = """Simula un router que escucha desde (router_IP, router_puerto) y tiene la tabla de rutas router_rutas
@@ -23,6 +24,7 @@ args: argparse.Namespace = parser.parse_args()
 
 class RouteTableLine:
     def __init__(self, line: str) -> None:
+        self.line = line
         self.red_CIDR, \
         puerto_inicial, \
         puerto_final, \
@@ -45,6 +47,12 @@ class RouteTableLine:
         ip, port = address
         if ip in self.CIDRrange() and self.inPortRange(port):
             return (self.ip_destino, self.puerto_destino)
+    
+    def __str__(self) -> str:
+        return self.line
+    
+    def __repr__(self) -> str:
+        return str(self)
 
 
 class RouteTable:
@@ -54,20 +62,36 @@ class RouteTable:
         with open(file_name) as table:
             for line in table:
                 self.table.append(RouteTableLine(line[:-1]))
+        self.cache: dict[tuple[str, int], list[RouteTableLine]] = {}
+        for line in self.table:
+            for ip in line.CIDRrange():
+                for port in range(line.puerto_inicial, line.puerto_final +1):
+                    if (ip, port) not in self.cache.keys():
+                        self.cache[(ip, port)] = [line]
+                    else:
+                        self.cache[(ip, port)].append(line)
+                
 
     def check_routes(self, destination_address: tuple[str, int]) -> tuple[str, int] | None:
-        for line in self.table:
-            result = line.check_route(destination_address)
-            if result: 
-                return result
+        result = None
+        if destination_address in self.cache.keys():
+            result = self.cache[destination_address][0].check_route(destination_address)
+            temp = self.cache[destination_address].pop(0)
+            self.cache[destination_address].append(temp)
+        else:
+            print(f"no existe la llave en el cache {destination_address}")
+            print(self.cache.keys())
+        return result
 
+ROUTETABLE = RouteTable(args.router_rutas)    
 
 def check_routes(routes_file_name: str, 
                  destination_address: tuple[str, int])-> tuple[str, int] | None:
-    myRouteTable = RouteTable(routes_file_name)
-    return myRouteTable.check_routes(destination_address)
+    return ROUTETABLE.check_routes(destination_address)
 
-ADDRESS: tuple[str, int]= (args.router_IP, args.router_puerto)
+routerIP = "127.0.0.1" if args.router_IP=="localhost" else args.router_IP
+
+ADDRESS: tuple[str, int]= (routerIP, args.router_puerto)
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -86,8 +110,8 @@ while True:
     else:
         next_hop = check_routes(args.router_rutas, packet.address)
         if next_hop:
-            print(f"Redirigiendo paquete [{packet}] con destino final {packet.address} \
-                  desde {ADDRESS} hacia {next_hop}")
+            print(f"Redirigiendo paquete [{packet}] con destino final {packet.address} desde {ADDRESS} hacia {next_hop}")
             s.sendto(msg, next_hop)
         else:
             print(f"No hay rutas hacia {packet.address} para paquete [{packet}]")
+            
