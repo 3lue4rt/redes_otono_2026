@@ -39,7 +39,7 @@ class RouteTableLine:
         ip, mask = self.red_CIDR.split("/")
         #por mientras tenemos un solo ip
         return {ip}
-    
+
     def inPortRange(self, port) -> bool:
         return self.puerto_inicial <= port <= self.puerto_final
 
@@ -47,10 +47,10 @@ class RouteTableLine:
         ip, port = address
         if ip in self.CIDRrange() and self.inPortRange(port):
             return (self.ip_destino, self.puerto_destino)
-    
+
     def __str__(self) -> str:
         return self.line
-    
+
     def __repr__(self) -> str:
         return str(self)
 
@@ -70,7 +70,7 @@ class RouteTable:
                         self.cache[(ip, port)] = [line]
                     else:
                         self.cache[(ip, port)].append(line)
-                
+
 
     def check_routes(self, destination_address: tuple[str, int]) -> tuple[str, int] | None:
         result = None
@@ -105,13 +105,16 @@ while True:
     print("Esperando paquetes ...")
     msg, _ = s.recvfrom(BUFFER_SIZE)
     packet = Packet.parse_packet(msg)
-    if packet.address == ADDRESS:
+    if packet.ttl<=0:
+        print(f"Se recibió paquete {packet} con TTL 0")
+    elif packet.address == ADDRESS:
         print(f"Recibí el siguiente mensaje: {packet.message}")
     else:
         next_hop = check_routes(args.router_rutas, packet.address)
+        packet.ttl -= 1
+        msg = packet.to_bytes()
         if next_hop:
             print(f"Redirigiendo paquete [{packet}] con destino final {packet.address} desde {ADDRESS} hacia {next_hop}")
             s.sendto(msg, next_hop)
         else:
             print(f"No hay rutas hacia {packet.address} para paquete [{packet}]")
-            

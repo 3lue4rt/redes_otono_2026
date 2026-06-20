@@ -25,9 +25,19 @@ FINAL_ADDRESS: tuple[str, int]= (args.IP_final, args.puerto_final)
 
 msg = input("ingrese el mensaje: ")
 
+ttl = None
+while True:
+    ttl = input("ingrese el ttl: ")
+    try:
+        ttl = int(ttl)
+        if not (0 <= ttl <= 255): raise Exception
+        else: break
+    except:
+        print("ttl no válido, intente de nuevo")
+
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-packet = Packet.Packet(address=FINAL_ADDRESS, message=msg.encode()).to_bytes()
+packet = Packet.Packet(address=FINAL_ADDRESS,ttl=ttl, message=msg.encode()).to_bytes()
 
 s.sendto(packet, INITIAL_ADDRESS)
 
