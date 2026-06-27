@@ -225,6 +225,8 @@ if __name__=="__main__":
         assert(fragments_fun[i].message == fragments[i].message)
     
     fragment_list = fragment_IP_packet(packet_og, 50)
+    #desordenemos los elementos
+    fragment_list[0], fragment_list[2] = fragment_list[2], fragment_list[0]
     packet_og_v2 = reassemble_IP_packet(fragment_list)
     if packet_og_v2:
         print(f"{packet_og} == {packet_og_v2} ? {packet_og.to_bytes() == packet_og_v2.to_bytes()}")

@@ -123,11 +123,11 @@ while True:
             fragment_dict[packet.id] = [packet]
 
         reensamble_try = Packet.reassemble_IP_packet(fragment_dict[packet.id])
-        if reensamble_try:
+        if reensamble_try is not None:
             print(f"Recibí el siguiente mensaje: \n{reensamble_try.message}")
             del fragment_dict[packet.id] #ya recibimos el paquete completo, borramos los fragmentos
         else:
-            print(f"Llegó el fragmento {packet.offset} al {packet.offset + packet.tamano}, \npero todavía no tengo el paquete completo")
+            print(f"Llegó el fragmento {packet.offset} al {packet.offset + packet.tamano} con flag {packet.flag}")
 
     else:
         next_hop_mtu = check_routes(args.router_rutas, packet.address)
